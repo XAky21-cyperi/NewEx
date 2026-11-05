@@ -37,7 +37,7 @@ const ILL_T = [5, 4.5, 4, 3.5, 3], ILL_CH = [5, 10, 15, 20, 25], ILL_DUR = [1, 1
 const DRONE_T = [0, 10, 8.5, 7, 5], SHAPE_T = [0, 0, 10, 9, 8], SHAPE_CH = [0, 0, 5, 10, 15];
 const MIND_T = [0, 0, 0, 15, 10], MIND_CH = [0, 0, 0, 10, 15];
 const AST_CHARGE_TICKS = 3600, SKY_HEIGHT = 1400, METEOR_FALL = 27, AST_TRAVEL = 360, AST_WAVE = 150;
-const AST_BODY_TILES = 100, AST_CRATERS = 32, AST_FLASH = 300, AST_FLASH_HOLD = 0.1, AST_QUAKE = 3600, AST_SHAKE = 60;
+const AST_BODY_TILES = 100, AST_CRATERS = 32, AST_FLASH = 300, AST_FLASH_HOLD = 0.1, AST_QUAKE = 3600, AST_SHAKE = 20;
 const MUSHROOM_TICKS = 2160, MUSHROOM_TILES = 64, AST_COOLDOWN = 18000, DEATH_TICKS = 36000, MEGA_COOLDOWN = 10800;
 const BLS_MAX_TICKS = 300, BLS_COOLDOWN_TICKS = 180; // tia plasma: đuổi tối đa 5s, hồi 3s
 const ORB_R = 12, METEOR_RAD_TILES = 4, METEOR_PUDDLES = 3, SLAG_CHANCE = 0.75, BLS_SPLASH_FRAC = 1 / 3, LAS_SPLASH_FRAC = 0.5;
@@ -423,26 +423,18 @@ const FX_AST_FLASH = new Effect(AST_FLASH, 100000, e => {
     Draw.alpha(left * left * (3 - 2 * left));
     Fill.rect(Core.camera.position.x, Core.camera.position.y, Core.camera.width * 1.3, Core.camera.height * 1.3); Draw.reset();
 });
-const FX_AST_QUAKE = new Effect(AST_QUAKE, 100000, e => { Vars.renderer.shake(AST_SHAKE * Math.pow(e.fout(), 0.6), 6); });
-const FX_AST_IMPACT = new Effect(AST_WAVE, 100000, e => {
-    const reach = Math.max(e.rotation, 400);
-    for(let k = 0; k < 3; k++){
-        const lag = k * 0.12, p = cl((e.fin() - lag) / (1 - lag));
-        if(p <= 0) continue;
-        const r = reach * (1 - (1 - p) * (1 - p)), left = 1 - p;
-        if(k == 0){ Draw.color(Color.orange); Draw.alpha(0.14 * left); Fill.circle(e.x, e.y, r); }
-        if(k == 0) Draw.color(Color.white, Color.orange, p); else if(k == 1) Draw.color(Color.orange, Color.scarlet, p); else Draw.color(ASH_C, SMOKE_C, p);
-        Draw.alpha(0.3 + 0.7 * left); Lines.stroke((60 - 15 * k) * (0.25 + 0.75 * left)); Lines.circle(e.x, e.y, r);
+const FX_AST_QUAKE = new Effect(AST_QUAKE, 100000, e => { if(!Vars.state.isPaused()) Vars.renderer.shake(AST_SHAKE * Math.pow(e.fout(), 0.6), 6); });
+const FX_AST_IMPACT = new Effect(260, 100000, e => {
+    // một xung sóng âm lan tới hết bản đồ rồi mới tan
+    const reach = Math.max(e.rotation, 400), p = e.fin(), r = reach * 1.05 * p, a = 1 - Math.pow(p, 4);
+    additive();
+    for(let i = 0; i < 10; i++){
+        const rr2 = r - i * 14;
+        if(rr2 <= 0) break;
+        const k = 1 - i / 10;
+        Draw.color(Color.white, Color.orange, i / 10); Draw.alpha(0.85 * a * k * k); Lines.stroke(16 * k + 2); Lines.circle(e.x, e.y, rr2);
     }
-    const p0 = e.fin(), r0 = reach * (1 - (1 - p0) * (1 - p0));
-    Draw.color(Color.white, Color.orange, p0); Draw.alpha(0.8 * (1 - p0)); Lines.stroke(10 * (1 - p0));
-    for(let i = 0; i < 48; i++){
-        const a = i * 7.5 + rs(i * 31 + 5, -3, 3), len = 120 + 260 * rs(i * 57 + 9, 0, 1), r1 = Math.max(0, r0 - len);
-        Lines.line(e.x + tx(a, r1), e.y + ty(a, r1), e.x + tx(a, r0), e.y + ty(a, r0));
-    }
-    const fb = cl(1 - e.fin() * 2.2);
-    if(fb > 0){ Draw.color(Color.white, Color.orange, e.fin() * 2.2); Draw.alpha(fb); Fill.circle(e.x, e.y, 520 * (1 - fb * 0.4)); }
-    Draw.reset();
+    Draw.blend(); Draw.reset();
 });
 const FX_AST_MUSHROOM = new Effect(MUSHROOM_TICKS, 12000, e => { drawMushroom(e.x, e.y, Math.max(e.rotation, 80), e.fin()); });
 const FX_BLAST = new Effect(30, 400, e => {
@@ -516,7 +508,7 @@ function upgradeFx(fx, o){
         if(on){
             if(o.flash && p < 0.22){ const k = 1 - p / 0.22; bloom(e.x, e.y, R * (0.45 + 0.9 * p / 0.22), c, k); flare(e.x, e.y, R * 2.2 * k, Math.max(2, R * 0.1), c, o.flareRot || 0, 0.9 * k); }
             if(o.glow) bloom(e.x, e.y, R * (0.35 + 0.35 * p) * fo + 2, c, 0.75 * fo);
-            if(o.shake && p < 0.1) Effect.shake(o.shake * (1 - p / 0.1), 8, e.x, e.y);
+            if(o.shake && p < 0.1 && !Vars.state.isPaused()) Effect.shake(o.shake * (1 - p / 0.1), 8, e.x, e.y);
         }
         orig.get(e);
         if(on){
@@ -546,7 +538,6 @@ upgradeFx(FX_METEOR, {rot: 1, r: 70, from: 0.6, flash: 1, sparks: 26, len: 18, r
 upgradeFx(FX_DEATH_LASER, {rot: 1, r: 40, glow: 1, sparks: 6, len: 8});
 upgradeFx(FX_DEATH_BLAST, {smoke: 8, rot: 1, r: 70, flash: 1, sparks: 24, len: 14, ring: 1, shake: 6});
 upgradeFx(FX_HEAL, {rot: 1, r: 40, glow: 1, sparks: 8, len: 6});
-upgradeFx(FX_AST_IMPACT, {rot: 1, r: 100, flash: 1, sparks: 40, len: 30, ring: 1});
 upgradeFx(FX_BLAST, {smoke: 5, r: 46, flash: 1, sparks: 14, len: 10, ring: 1});
 upgradeFx(FX_PURPLE_BURST, {r: 30, flash: 1, sparks: 12, len: 10});
 upgradeFx(FX_SHAPE, {r: 30, glow: 1, sparks: 10, len: 8});
@@ -725,7 +716,132 @@ function section(t, title){
 }
 function addBack(d){ d.addCloseButton(); d.buttons.clear(); d.buttons.button(T("Trở về", "Back"), Styles.flatBordert, run(() => d.hide())).size(210, 64); }
 
-// ================= BLOCK =================
+// ---------- thermion-glow: phát sáng theo màu dạng + effect theo dạng
+let glowRegion = null;
+const glowCol = new Color();
+const getGlow = () => { if(glowRegion == null) glowRegion = Core.atlas.find("newex-thermion-glow"); return glowRegion; };
+function drawGlow(x, y, c, a, sc){
+    const r = getGlow();
+    if(r == null || !r.found()) return;
+    let w = 64; try{ w = r.width * r.scl(); }catch(err){}
+    w *= sc; Draw.color(c); Draw.alpha(Math.min(1, Math.max(0, a))); Draw.rect(r, x, y, w, w); Draw.reset();
+}
+// Blue: mỗi giây zoom to lên chút rồi tan
+const FX_GLOW_ZOOM = new Effect(50, 400, e => { drawGlow(e.x, e.y, e.color, 0.7 * e.fout(), 1 + 0.18 * e.finpow()); });
+// Yellow: tia từ ngoài bay vào tâm lõi rồi tan
+const FX_GLOW_IN = new Effect(50, 400, e => {
+    const d = 52 * e.fout(), px = e.x + tx(e.rotation, d), py = e.y + ty(e.rotation, d);
+    additive(); Draw.color(Color.gold, Color.white, e.fin()); Lines.stroke(2.2 * e.fout() + 0.4);
+    Lines.lineAngle(px, py, e.rotation + 180, 6 + 10 * e.fout()); Fill.circle(px, py, 2.2 * e.fout() + 0.5);
+    Draw.blend(); Draw.reset();
+});
+// Purple: lõi thu nhỏ lại rồi trôi tới chỗ drone spawn. rotation = góc(từ drone về lõi) + 360 * khoảng cách
+const FX_GLOW_DRONE = new Effect(45, 400, e => {
+    const ang = e.rotation % 360, dist = Math.floor(e.rotation / 360), cx = e.x + tx(ang, dist), cy = e.y + ty(ang, dist);
+    const mv = cl((e.fin() - 0.3) / 0.7), sc = lerp(1, 0.25, cl(e.fin() / 0.5));
+    drawGlow(lerp(cx, e.x, mv * mv * (3 - 2 * mv)), lerp(cy, e.y, mv * mv * (3 - 2 * mv)), e.color, 0.75 * (1 - cl((e.fin() - 0.8) / 0.2)), sc);
+});
+
+// ---------- cutscene khi lên level 5: pháo bắn tới 4 góc map -> zoom toàn map -> quét lưới 16x16 ô
+const CS = {pending: null, age: 0, on: false, stage: 0, t: 0, ox: 0, oy: 0, sx: 0, sy: 0, col: Color.sky, stars: [0, 0, 0, 0], oldScale: 1, oldMin: 1.5, grid: 0};
+const CS_PAN = 100, CS_HOLD = 50, CS_ZOOM = 200, CS_GRID = 420, CS_END = 90, CELL = 16;
+const csCorner = i => { const W = Vars.world.unitWidth(), H = Vars.world.unitHeight(), m = 4 * TS; return [[m, m], [W - m, m], [W - m, H - m], [m, H - m]][i]; };
+const csFit = () => Math.min(Core.graphics.getWidth() / Vars.world.unitWidth(), Core.graphics.getHeight() / Vars.world.unitHeight()) * 0.92;
+const smooth = p => { p = cl(p); return p * p * (3 - 2 * p); };
+function startCutscene(x, y, col){ if(!CS.on && !Vars.headless) CS.pending = [x, y, col]; }
+function beginCutscene(x, y, col){
+    CS.on = true; CS.age = 0; CS.stage = 0; CS.t = 0; CS.ox = x; CS.oy = y; CS.sx = Core.camera.position.x; CS.sy = Core.camera.position.y;
+    CS.col = col; CS.stars = [0, 0, 0, 0]; CS.grid = 0;
+    try{ CS.oldScale = Vars.renderer.getScale(); CS.oldMin = Vars.renderer.minZoom; Vars.renderer.minZoom = 0.01; }catch(err){}
+    try{ Vars.control.input.logicCutscene = true; }catch(err){}
+}
+function endCutscene(){
+    CS.on = false;
+    try{ Vars.control.input.logicCutscene = false; Vars.renderer.minZoom = CS.oldMin; Vars.renderer.setScale(CS.oldScale); }catch(err){}
+}
+function csCam(x, y){ Core.camera.position.set(x, y); }
+function csUpdate(){
+    if(CS.pending != null && Vars.state.isGame() && !Vars.state.isPaused() && !Core.scene.hasDialog()){ const p = CS.pending; CS.pending = null; beginCutscene(p[0], p[1], p[2]); }
+    if(!CS.on) return;
+    if(!Vars.state.isGame()){ endCutscene(); return; }
+    CS.t += Time.delta; CS.age += Time.delta;
+    const st = CS.stage, W = Vars.world.width(), H = Vars.world.height();
+    if(st < 4){
+        const c = csCorner(st);
+        if(CS.t < CS_PAN){
+            const p = smooth(CS.t / CS_PAN);
+            csCam(lerp(CS.sx, c[0], p), lerp(CS.sy, c[1], p));
+        }else{
+            csCam(c[0], c[1]);
+            if(CS.stars[st] == 0){ CS.stars[st] = 0.001; FX_BLAST.at(c[0], c[1], 70, CS.col); Effect.shake(6, 12, c[0], c[1]); }
+            CS.stars[st] = Math.min(1, CS.stars[st] + Time.delta / 25);
+            if(CS.t >= CS_PAN + CS_HOLD){ CS.stage++; CS.t = 0; CS.sx = c[0]; CS.sy = c[1]; }
+        }
+    }else if(st == 4){
+        const p = smooth(CS.t / CS_ZOOM);
+        csCam(lerp(CS.sx, Vars.world.unitWidth() / 2, p), lerp(CS.sy, Vars.world.unitHeight() / 2, p));
+        try{ Vars.renderer.setScale(lerp(CS.oldScale, csFit(), p)); }catch(err){}
+        if(CS.t >= CS_ZOOM + 40){ CS.stage = 5; CS.t = 0; }
+    }else if(st == 5){
+        csCam(Vars.world.unitWidth() / 2, Vars.world.unitHeight() / 2);
+        const total = Math.ceil(W / CELL) * Math.ceil(H / CELL);
+        CS.grid = Math.floor(total * cl(CS.t / CS_GRID));
+        if(CS.t >= CS_GRID){ CS.grid = total; CS.stage = 6; CS.t = 0; }
+    }else if(st == 6){
+        if(CS.t >= CS_END){ CS.stage = 7; CS.t = 0; CS.sx = Vars.world.unitWidth() / 2; CS.sy = Vars.world.unitHeight() / 2; }
+    }else{
+        const p = smooth(CS.t / 90);
+        csCam(lerp(CS.sx, CS.ox, p), lerp(CS.sy, CS.oy, p));
+        try{ Vars.renderer.setScale(lerp(csFit(), CS.oldScale, p)); }catch(err){}
+        if(CS.t >= 90) endCutscene();
+    }
+    try{ if(CS.age > 60 && !Core.scene.hasDialog() && Core.input.keyTap(Packages.arc.input.KeyCode.escape)) endCutscene(); }catch(err){}
+}
+function drawStar4(x, y, len, a, c){
+    if(len <= 0) return;
+    additive(); Draw.color(c); Draw.alpha(0.5 * a);
+    for(let k = 0; k < 4; k++) Drawf.tri(x, y, len * 0.2, len * 1.2, 90 * k + 45 * 0);
+    Draw.color(Color.white, c, 0.3); Draw.alpha(a);
+    for(let k = 0; k < 4; k++) Drawf.tri(x, y, len * 0.11, len, 90 * k);
+    Draw.blend(); bloom(x, y, len * 0.6, c, 0.8 * a); Draw.color(Color.white); Fill.circle(x, y, len * 0.08); Draw.reset();
+}
+function csDraw(){
+    if(!CS.on) return;
+    const z = Draw.z(); Draw.z(Layer.overlayUI);
+    const st = CS.stage, big = st >= 4 ? 3 : 1;
+    // tia bắn từ pháo tới góc đang lia camera
+    if(st < 4 && CS.t < CS_PAN + 20){
+        const c = csCorner(st), p = smooth(CS.t / CS_PAN), hx = lerp(CS.ox, c[0], p), hy = lerp(CS.oy, c[1], p);
+        beamTo(CS.ox, CS.oy, hx, hy, 4 * (1 - 0.5 * p), CS.col); bloom(hx, hy, 26, CS.col, 0.9);
+    }
+    for(let i = 0; i < 4; i++){
+        if(CS.stars[i] <= 0) continue;
+        const c = csCorner(i), pop = CS.stars[i], len = (TS * 7) * big * (1 - Math.pow(1 - pop, 3)) * (1 + 0.08 * Math.sin(Time.time * 0.1 + i));
+        drawStar4(c[0], c[1], len, 1, CS.col);
+    }
+    // nối 4 ngôi sao khi zoom toàn map
+    if(st >= 4){
+        const lp = st == 4 ? smooth(CS.t / CS_ZOOM) : 1;
+        for(let i = 0; i < 4; i++){
+            const a = csCorner(i), b = csCorner((i + 1) % 4);
+            beamTo(a[0], a[1], lerp(a[0], b[0], lp), lerp(a[1], b[1], lp), 3 * big, CS.col);
+        }
+    }
+    // lưới khu vực 16x16 ô, hiện lần lượt
+    if(st >= 5){
+        const W = Vars.world.width(), H = Vars.world.height(), cols = Math.ceil(W / CELL), rows = Math.ceil(H / CELL), n = Math.min(CS.grid, cols * rows);
+        Lines.stroke(2);
+        for(let k = 0; k < n; k++){
+            const cx = k % cols, cy = Math.floor(k / cols), x0 = cx * CELL * TS, y0 = cy * CELL * TS, w = Math.min(CELL, W - cx * CELL) * TS, h = Math.min(CELL, H - cy * CELL) * TS;
+            const fresh = cl(1 - (n - k) / 40);
+            Draw.color(CS.col); Draw.alpha(0.12 + 0.3 * (1 - fresh)); Fill.rect(x0 + w / 2, y0 + h / 2, w, h);
+            Draw.color(CS.col, Color.white, 0.4 * (1 - fresh)); Draw.alpha(0.5 + 0.4 * (1 - fresh)); Lines.rect(x0, y0, w, h);
+        }
+        Draw.reset();
+    }
+    Draw.reset(); Draw.z(z);
+}
+Events.run(TRIG.update, run(csUpdate));
 // Block được khai báo khai báo bằng content/blocks/thermion.hjson (type: Block, size, health,
 // category, requirements, buildVisibility...). Ở đây chỉ lấy lại content đó và gắn thêm
 // bar + buildType tùy biến (không cần extend(Block, ...) nữa).
@@ -794,6 +910,7 @@ thermionBuild = prov(() => {
             NexNet.fx(n >= MAX_LEVEL ? Fx.bigShockwave : Fx.upgradeCore, this.x, this.y);
             NexNet.fx(Fx.mineHuge, this.x, this.y);
             NexNet.shake(6, 6, this.x, this.y);
+            if(n >= MAX_LEVEL) startCutscene(this.x, this.y, formColor(st.form));
         }
         this.health = Math.max(1, frac * this.nexMaxHealth());
         this.resetSkillStates();
@@ -898,6 +1015,10 @@ thermionBuild = prov(() => {
         st.secondTimer += Time.delta;
         if(st.secondTimer >= 60){ st.secondTimer -= 60; st.secTick = true; }
         if(st.pendingForm >= 0){ this.tickFormChange(); return; }
+        if(st.secTick){
+            if(st.form == BLUE) this.fx(FX_GLOW_ZOOM, this.x, this.y, 0, BLUE_COLOR);
+            else if(st.form == YELLOW) for(let i = 0; i < 8; i++) this.fx(FX_GLOW_IN, this.x, this.y, rnd(0, 360), YELLOW_COLOR);
+        }
         if(st.skillCd < 1) st.skillCd = Math.min(1, st.skillCd + Time.delta / this.skillCooldownTicks(st.form));
         const lv = st.level;
         if(st.form == YELLOW){
@@ -1277,9 +1398,8 @@ thermionBuild = prov(() => {
         this.fx(FX_AST_FLASH, cx, cy, 0, Color.white);
         this.fx(FX_AST_QUAKE, cx, cy, 0, Color.orange);
         this.fx(FX_AST_IMPACT, cx, cy, dst(cx, cy, 0, 0), Color.orange);
-        this.fx(FX_AST_MUSHROOM, cx, cy, MUSHROOM_TILES * TS, Color.orange);
-        for(let i = 0; i < doomedU.length; i++){ const u = doomedU[i]; this.fx(FX_BLAST, u.x, u.y, u.hitSize, Color.orange); u.kill(); }
-        for(let i = 0; i < doomedB.length; i++){ const b = doomedB[i]; this.fx(FX_BLAST, b.x, b.y, b.block.size * TS, Color.orange); b.kill(); }
+        for(let i = 0; i < doomedU.length; i++) doomedU[i].kill();
+        for(let i = 0; i < doomedB.length; i++) doomedB[i].kill();
         this.scorchMap();
         this.setForm(DEATH);
     },
@@ -1324,6 +1444,8 @@ thermionBuild = prov(() => {
         d.add();
         st.drones.push(d);
         this.fx(FX_PURPLE_BURST, d.x, d.y, 0, PURPLE_COLOR);
+        const gdx = this.x - d.x, gdy = this.y - d.y;
+        this.fx(FX_GLOW_DRONE, d.x, d.y, (Math.atan2(gdy, gdx) / DEG + 360) % 360 + 360 * Math.round(Math.hypot(gdx, gdy)), PURPLE_COLOR);
     },
     updateShapeshifter(){
         if(!this.every(T_SHAPE, val(SHAPE_T, st.level) * 60)) return;
@@ -1431,6 +1553,7 @@ thermionBuild = prov(() => {
         const body = new Table();
         let sig = -1;
         body.update(run(() => {
+            if(st.level >= MAX_LEVEL){ d.hide(); return; }
             const sg = st.level * 1000003 + self.paidTotal() * 31 + (isSandbox() ? 7 : 0);
             if(sig != sg){ sig = sg; self.buildUpgradeBody(body); }
         }));
@@ -1596,6 +1719,11 @@ thermionBuild = prov(() => {
         if(st.form == DEATH) return;
         this.drawRangeRing();
         const t = Time.time;
+        if(this.hasEnoughPower() || st.asteroidPhase != AST_NONE){
+            glowCol.set(formColor(st.form));
+            if(st.pendingForm >= 0) glowCol.lerp(formColor(st.pendingForm), this.changeProgress());
+            Draw.z(Layer.block + 0.01); drawGlow(this.x, this.y, glowCol, 0.8 + 0.2 * Math.sin(t * 0.08), 1);
+        }
         Draw.z(Layer.blockOver);
         if(st.asteroidPhase != AST_NONE){ this.drawAsteroidBeam(t); Draw.reset(); return; }
         if(!this.hasEnoughPower()) return;
