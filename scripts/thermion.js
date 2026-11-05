@@ -39,6 +39,7 @@ const MIND_T = [0, 0, 0, 15, 10], MIND_CH = [0, 0, 0, 10, 15];
 const AST_CHARGE_TICKS = 3600, SKY_HEIGHT = 1400, METEOR_FALL = 27, AST_TRAVEL = 360, AST_WAVE = 150;
 const AST_BODY_TILES = 100, AST_CRATERS = 32, AST_FLASH = 300, AST_FLASH_HOLD = 0.1, AST_QUAKE = 3600, AST_SHAKE = 60;
 const MUSHROOM_TICKS = 2160, MUSHROOM_TILES = 64, AST_COOLDOWN = 18000, DEATH_TICKS = 36000, MEGA_COOLDOWN = 10800;
+const BLS_MAX_TICKS = 300, BLS_COOLDOWN_TICKS = 180; // tia plasma: đuổi tối đa 5s, hồi 3s
 const ORB_R = 12, METEOR_RAD_TILES = 4, METEOR_PUDDLES = 3, SLAG_CHANCE = 0.75, BLS_SPLASH_FRAC = 1 / 3, LAS_SPLASH_FRAC = 0.5;
 const SH_START = 0.1, BONUS_PER_M = 0.005, BONUS_CAP = 10000000, BONUS_BLADE = 0.5;
 const SH_REGEN = 120, SH_REGEN_FRAC = 0.1, SH_HIT_GAP = 4, LOOP_TICKS = 46, SPH_SPAWN_R = 15;
@@ -118,7 +119,7 @@ function drawCorePulse(x, y, color, scale){
     Draw.color(color);
     const r = (Time.time * 2) % 24 * scale;
     Draw.alpha(Math.max(0, 1 - r / (24 * scale)) * auraAlpha);
-    Lines.stroke(2); Lines.poly(x, y, 6, r, Time.time * 2); Draw.reset();
+    Lines.stroke(2); Lines.poly(x, y, 6, r, 0); Draw.reset();
 }
 function drawMeteorImpact(x, y, radius, p){
     Draw.color(Color.scarlet, Color.orange, p); Lines.stroke(3 * (1 - p)); Lines.circle(x, y, radius * p);
@@ -188,7 +189,7 @@ function drawMushroom(x, y, s, p){
     Draw.reset();
 }
 function drawYellowAura(x, y, level, t){
-    const core = 7 + Math.sin(t * 0.15) * 2, base = -t * 2;
+    const core = 7 + Math.sin(t * 0.15) * 2, base = 0;
     drawMulti((scale, ov, alpha) => {
         Draw.color(ov != null ? ov : Color.gold); Draw.alpha(alpha); Fill.circle(x, y, core * scale);
         for(let i = 0; i < 8; i++){
@@ -199,22 +200,22 @@ function drawYellowAura(x, y, level, t){
     });
     if(level >= 3) drawMulti((scale, ov, alpha, ss) => {
         if(ov != null) Draw.color(ov); else Draw.color(Color.yellow, Color.orange, (Math.sin(t * 0.05) + 1) * 0.5);
-        Draw.alpha(alpha * 0.7); Lines.stroke(1.5 * ss); Lines.poly(x, y, 8, 36 * scale, t * 1.5); Draw.reset();
+        Draw.alpha(alpha * 0.7); Lines.stroke(1.5 * ss); Lines.poly(x, y, 8, 36 * scale, 0); Draw.reset();
     });
 }
 function drawBlueAura(x, y, t){
     const sf = 1 + Math.sin(t * 0.1) * 0.25, core = (7 + Math.sin(t * 0.15) * 2) * sf, r1 = 22 * sf, r2 = 30 * sf;
-    const a1 = (t * 3) % 360, a2 = (180 - t * 4) % 360;
+    const a1 = 0, a2 = 180;
     drawMulti((scale, ov, alpha, ss) => {
         Draw.color(ov != null ? ov : Color.sky); Draw.alpha(alpha); Fill.circle(x, y, core * scale);
         Lines.stroke(2 * ss); Lines.arc(x, y, r1, 0.75, a1); Lines.arc(x, y, r2, 0.75, a2); Draw.reset();
     });
 }
 function drawPurpleAura(x, y, t){
-    const radius = 28, base = t * 2;
+    const radius = 28, base = 0;
     drawMulti((scale, ov, alpha, ss) => {
         for(let i = 0; i < 4; i++){
-            const sa = t * 2 + i * 90, sr = 12 + Math.sin(t * 0.1 + i) * 3;
+            const sa = i * 90, sr = 12 + Math.sin(t * 0.1 + i) * 3;
             Draw.color(ov != null ? ov : Color.violet); Draw.alpha(alpha);
             Fill.circle(x + Math.cos(sa * DEG) * sr, y + Math.sin(sa * DEG) * sr, 3.5 * scale);
         }
@@ -229,11 +230,11 @@ function drawPurpleAura(x, y, t){
     });
 }
 function drawRange(x, y, radius, c){
-    Draw.z(Layer.overlayUI); Draw.color(c); Draw.alpha(0.6); Lines.stroke(2); Lines.poly(x, y, 12, radius, Time.time * 0.5);
+    Draw.z(Layer.overlayUI); Draw.color(c); Draw.alpha(0.6); Lines.stroke(2); Lines.poly(x, y, 12, radius, 0);
     const pr = (Time.time % 90) / 90 * radius;
     Draw.alpha(1 - pr / radius); Lines.stroke(1); Lines.circle(x, y, pr);
     Draw.alpha(0.8);
-    for(let i = 0; i < 4; i++){ const a = i * 90 + Time.time * 0.2; Fill.square(x + Math.cos(a * DEG) * radius, y + Math.sin(a * DEG) * radius, 3, a); }
+    for(let i = 0; i < 4; i++){ const a = i * 90; Fill.square(x + Math.cos(a * DEG) * radius, y + Math.sin(a * DEG) * radius, 3, a); }
     Draw.alpha(0.15); Fill.circle(x, y, radius); Draw.reset();
 }
 function skyBeam(x, y, width, alpha, height, c){
@@ -250,27 +251,28 @@ function beamTo(x1, y1, x2, y2, width, c){
     });
 }
 function drawSaw(sx, sy, rad, rot, am){
-    drawTight((scale, ov, a) => {
-        Draw.color(ov != null ? ov : Color.gold); Draw.alpha(a * am);
-        const rr2 = rad * scale; Fill.circle(sx, sy, rr2 * 0.62);
-        const teeth = 10, step = 360 / teeth;
-        for(let k = 0; k < teeth; k++){
-            const ang = rot + k * step, a1 = ang - step * 0.32, a2 = ang + step * 0.32, tip = ang + step * 0.25;
-            Fill.tri(sx + tx(a1, rr2 * 0.55), sy + ty(a1, rr2 * 0.55), sx + tx(a2, rr2 * 0.55), sy + ty(a2, rr2 * 0.55), sx + tx(tip, rr2), sy + ty(tip, rr2));
-        }
-        Draw.reset();
-    });
+    additive(); Draw.color(Color.gold); Draw.alpha(0.55 * am);
+    for(let k = 0; k < 2; k++) Drawf.tri(sx, sy, rad * 0.55, rad * 1.5, rot + k * 180);
+    Draw.color(Color.white, Color.gold, 0.25); Draw.alpha(0.95 * am);
+    for(let k = 0; k < 2; k++) Drawf.tri(sx, sy, rad * 0.3, rad * 1.15, rot + k * 180);
+    Draw.color(Color.gold); Draw.alpha(0.8 * am); Lines.stroke(1.5); Lines.circle(sx, sy, rad * 0.6);
+    Draw.blend(); bloom(sx, sy, rad * 0.9, Color.gold, 0.8 * am);
+    Draw.color(Color.white); Fill.circle(sx, sy, rad * 0.16); Draw.reset();
 }
-function drawOrb(ox, oy, r, glow){
-    Draw.color(Color.gold, 0.45); Fill.circle(ox, oy, r * 1.18);
-    Draw.color(Color.gold, 0.7 + 0.3 * cl(glow)); Fill.circle(ox, oy, r);
-    Draw.color(Color.white); Fill.circle(ox, oy, r * 0.72); Draw.reset();
+function drawOrb(ox, oy, r, glow, spinMul){
+    const g = cl(glow), len = r * (1.2 + 2.8 * g), w = r * (0.55 + 0.35 * g), rot = 90;
+    additive(); Draw.color(Color.gold); Draw.alpha(0.5);
+    for(let k = 0; k < 3; k++) Drawf.tri(ox, oy, w * 1.7, len * 1.25, rot + k * 120);
+    Draw.color(Color.white, Color.gold, 0.3); Draw.alpha(0.95);
+    for(let k = 0; k < 3; k++) Drawf.tri(ox, oy, w, len, rot + k * 120);
+    Draw.blend(); bloom(ox, oy, r * (1 + g), Color.gold, 0.7);
+    Draw.color(Color.white); Fill.circle(ox, oy, r * 0.35); Draw.reset();
 }
 function drawElectricRing(x, y, r, t){
     Draw.color(Color.gold, Color.white, 0.3); Draw.alpha(0.85); Lines.stroke(1.2);
     const seg = 10; let px = 0, py = 0;
     for(let i = 0; i <= seg; i++){
-        const a = i * 360 / seg + t * 3, r2 = r + Math.sin(t * 0.7 + i * 2.3) * 2;
+        const a = i * 360 / seg, r2 = r + Math.sin(t * 0.7 + i * 2.3) * 2;
         const cx = x + Math.cos(a * DEG) * r2, cy = y + Math.sin(a * DEG) * r2;
         if(i > 0) Lines.line(px, py, cx, cy);
         px = cx; py = cy;
@@ -279,7 +281,7 @@ function drawElectricRing(x, y, r, t){
 }
 function drawStunMark(x, y, r, t, c){
     Draw.color(c); Draw.alpha(0.9); Lines.stroke(1.5);
-    Lines.arc(x, y, r + 4, 0.25, t * 5); Lines.arc(x, y, r + 4, 0.25, t * 5 + 180);
+    Lines.arc(x, y, r + 4, 0.25, 0); Lines.arc(x, y, r + 4, 0.25, 180);
     Fill.square(x, y + r + 8 + Math.sin(t * 0.2) * 2, 2, 45); Draw.reset();
 }
 
@@ -333,12 +335,44 @@ const FX_BLASTER = new Effect(16, 1700, e => {
     }
     Draw.reset();
 });
+// sprites/shapes/meteor.png -> vùng ảnh "newex-meteor". METEOR_SPRITE_ROT: xoay thêm nếu ảnh gốc không hướng lên trên.
+const METEOR_SPRITE_ROT = 0, METEOR_SPRITE_SIZE = 84;
+let meteorRegion = null;
+const getMeteorRegion = () => { if(meteorRegion == null) meteorRegion = Core.atlas.find("newex-meteor"); return meteorRegion; };
+const METEOR_DX = 480, METEOR_DY = 520, STAR_MIN = 2, STAR_MAX = 3.5; // bay từ phải-trên xuống; kích thước & độ dài sao: 4-7 ô
+function drawMeteorFall(e, f, hx, hy){
+    const ang = Math.atan2(METEOR_DY, METEOR_DX) / DEG, size = rs(e.id * 3 + 1, STAR_MIN, STAR_MAX) * TS, tail = rs(e.id * 5 + 2, STAR_MIN, STAR_MAX) * TS;
+    const spin = e.fin() * 540 + rs(e.id, 0, 360);
+    // bóng đổ + vòng cảnh báo điểm rơi
+    Draw.color(Color.black); Draw.alpha(0.28 * f); Fill.circle(e.x, e.y, 5 + 17 * f);
+    Draw.color(Color.scarlet, Color.orange, f); Draw.alpha(0.5 + 0.4 * f); Lines.stroke(2); Lines.circle(e.x, e.y, 23 * (1 - f) + 6);
+    additive();
+    // đuôi lửa: tam giác phát sáng + 6 ảnh sao mờ dần dọc theo đuôi
+    Draw.color(Color.white, Color.scarlet, 0.5); Draw.alpha(0.7); Drawf.tri(hx, hy, size * 0.5, tail, ang);
+    Draw.color(Color.orange); Draw.alpha(0.35); Drawf.tri(hx, hy, size * 0.9, tail * 0.8, ang);
+    for(let k = 1; k <= 6; k++){
+        const d = tail * k / 6, sc = 1 - k / 7;
+        Draw.color(Color.orange, Color.scarlet, k / 6); Draw.alpha(0.5 * sc);
+        for(let a2 = 0; a2 < 4; a2++) Drawf.tri(hx + tx(ang, d), hy + ty(ang, d), size * 0.2 * sc, size * 0.8 * sc, spin - k * 25 + a2 * 90);
+    }
+    // sao 4 cánh: lớp ngoài màu cam, lớp trong trắng
+    Draw.color(Color.orange, Color.white, 0.3); Draw.alpha(0.6);
+    for(let a2 = 0; a2 < 4; a2++) Drawf.tri(hx, hy, size * 0.34, size * 1.25, spin + a2 * 90);
+    Draw.color(Color.white); Draw.alpha(0.95);
+    for(let a2 = 0; a2 < 4; a2++) Drawf.tri(hx, hy, size * 0.22, size * (a2 % 2 == 0 ? 1 : 0.7), spin + a2 * 90);
+    Draw.blend();
+    bloom(hx, hy, size * 1.1, Color.orange, 0.9);
+    Draw.color(Color.white); Fill.circle(hx, hy, size * 0.12);
+    // tàn lửa bắn ra phía sau
+    Draw.color(Color.white, Color.orange, 0.5); Lines.stroke(1.6);
+    for(let i = 0; i < 14; i++){ const a = ang + rs(e.id * 5 + i, -30, 30), d = 10 + tail * 1.4 * ((e.fin() * 6 + i * 0.29) % 1); Lines.lineAngle(hx + tx(ang, d) + tx(a + 90, rs(i, -8, 8)), hy + ty(ang, d), a, 8 * (1 - d / (tail * 1.5))); }
+    Draw.reset();
+}
 const FX_METEOR = new Effect(45, 900, e => {
     const split = 0.6;
     if(e.fin() < split){
-        const f = e.fin() / split, hx = e.x + 220 * (1 - f), hy = e.y + 640 * (1 - f);
-        Draw.color(Color.scarlet, Color.orange, f); Lines.stroke(5); Lines.line(hx, hy, hx + 220 * 0.12, hy + 640 * 0.12);
-        Draw.color(Color.orange, Color.white, f); Fill.circle(hx, hy, 6);
+        const f = e.fin() / split;
+        drawMeteorFall(e, f, e.x + METEOR_DX * (1 - f), e.y + METEOR_DY * (1 - f));
     }else drawMeteorImpact(e.x, e.y, e.rotation > 0 ? e.rotation : 30, (e.fin() - split) / (1 - split));
     Draw.reset();
 });
@@ -361,10 +395,23 @@ const FX_HEAL = new Effect(45, 400, e => {
     }
     Draw.reset();
 });
+// Thiên thạch lớn kéo xuống: dùng sprites/shapes/meteor.png (vùng "newex-meteor"); thiếu ảnh thì vẽ thân procedural cũ.
+const AST_SPRITE_SCALE = 2.15, AST_SPRITE_ROT = 0;
+function drawAsteroidSprite(px, py, rad, seed, ap){
+    const reg = getMeteorRegion();
+    if(reg == null || !reg.found()){ drawAsteroidBody(px, py, rad, seed); return; }
+    const d = rad * AST_SPRITE_SCALE, rot = AST_SPRITE_ROT + rs(seed, 0, 360) + ap * 50;
+    bloom(px, py, rad * 1.25, Color.orange, 0.35 + 0.4 * ap);               // quầng nhiệt lớn dần khi vào khí quyển
+    Draw.reset(); Draw.rect(reg, px, py, d, d, rot);
+    Draw.color(Color.scarlet, Color.orange, ap); Draw.alpha(0.25 + 0.35 * ap); // lớp lửa viền
+    try{ Draw.blend(Packages.arc.graphics.Blending.additive); }catch(err){}
+    Fill.circle(px, py, rad * 1.02);
+    Draw.blend(); Draw.reset();
+}
 const FX_AST_FALL = new Effect(AST_TRAVEL, 40000, e => {
     const acx = Vars.world.unitWidth() / 2, acy = Vars.world.unitHeight() / 2, ap = e.fin();
     const px = lerp(e.x, acx, ap), py = lerp(e.y, acy, ap), rad = AST_BODY_TILES * TS;
-    drawAsteroidBody(px, py, rad, Math.floor(e.rotation * 100));
+    drawAsteroidSprite(px, py, rad, Math.floor(e.rotation * 100), ap);
     drawMulti((scale, ov, a, ss) => {
         Draw.color(ov != null ? ov : Color.orange); Draw.alpha(a * 0.7); Lines.stroke(30 * ss); Lines.poly(px, py, 64, rad, 0); Draw.reset();
     });
@@ -435,6 +482,77 @@ const FX_HYPNOSIS = new Effect(70, 8000, e => {
     Draw.reset();
 });
 
+// ---------- nâng cấp điện ảnh: giữ nét vẽ đường/vòng/đa giác gốc, thêm bloom, tia sáng, tia lửa, sóng xung kích và rung màn hình
+const additive = () => { try{ Draw.blend(Packages.arc.graphics.Blending.additive); }catch(err){} };
+function bloom(x, y, r, col, a){
+    if(r <= 0 || a <= 0) return;
+    additive();
+    for(let i = 0; i < 4; i++){ Draw.color(col, Color.white, i * 0.24); Draw.alpha(Math.min(1, a * (0.22 + 0.14 * i))); Fill.circle(x, y, r * (1 - i * 0.22)); }
+    Draw.blend(); Draw.reset();
+}
+function flare(x, y, len, w, col, rot, a){
+    if(len <= 0 || a <= 0) return;
+    additive(); Draw.color(col, Color.white, 0.5); Draw.alpha(a);
+    for(let k = 0; k < 2; k++){ const r = rot + k * 90; Drawf.tri(x, y, w, len, r); Drawf.tri(x, y, w, len, r + 180); }
+    Draw.blend(); Draw.reset();
+}
+function sparkBurst(x, y, id, p, n, dist, len, col){
+    const fo = 1 - p;
+    Draw.color(Color.white, col, p);
+    for(let i = 0; i < n; i++){
+        const a = rs(id * 7 + i, 0, 360), d = dist * Math.pow(p, 0.55) * rs(id * 3 + i * 5, 0.55, 1);
+        Lines.stroke(1.8 * fo + 0.3);
+        Lines.lineAngle(x + tx(a, d), y + ty(a, d), a, len * fo + 1);
+    }
+    Draw.reset();
+}
+function upgradeFx(fx, o){
+    const orig = fx.renderer;
+    fx.renderer = cons(e => {
+        const c = e.color == null ? Color.white : e.color;
+        const R = o.rot ? Math.max(e.rotation, o.r || 30) : (o.r || 30);
+        const f0 = o.from || 0, on = e.fin() >= f0, p = on ? (e.fin() - f0) / (1 - f0) : 0, fo = 1 - p;
+        if(!on && o.pre) o.pre(e, c);
+        if(on){
+            if(o.flash && p < 0.22){ const k = 1 - p / 0.22; bloom(e.x, e.y, R * (0.45 + 0.9 * p / 0.22), c, k); flare(e.x, e.y, R * 2.2 * k, Math.max(2, R * 0.1), c, o.flareRot || 0, 0.9 * k); }
+            if(o.glow) bloom(e.x, e.y, R * (0.35 + 0.35 * p) * fo + 2, c, 0.75 * fo);
+            if(o.shake && p < 0.1) Effect.shake(o.shake * (1 - p / 0.1), 8, e.x, e.y);
+        }
+        orig.get(e);
+        if(on){
+            if(o.ring){ const f = Math.max(0, (p - 0.12) / 0.88); if(f > 0){ Draw.color(c, Color.white, 1 - f); Draw.alpha(0.8 * (1 - f)); Lines.stroke(2.5 * (1 - f)); Lines.circle(e.x, e.y, R * 1.1 * Math.pow(f, 0.5)); Draw.reset(); } }
+            if(o.smoke){ for(let i = 0; i < o.smoke; i++){ const q = Math.min(1, p * 1.2), a = rs(e.id + i * 13, 0, 360), d = R * 0.9 * Math.pow(q, 0.5) * rs(e.id * 3 + i, 0.3, 1);
+                Draw.color(Color.gray, Color.darkGray, q); Draw.alpha(0.5 * (1 - q) * (1 - q)); Fill.circle(e.x + tx(a, d), e.y + ty(a, d) + 18 * q, R * (0.12 + 0.22 * q)); } Draw.reset(); }
+            if(o.sparks) sparkBurst(e.x, e.y, e.id, p, o.sparks, R * 1.15, o.len || 8, c);
+        }
+    });
+}
+const FX_PLASMA = new Effect(6, 1700, e => {
+    const fl = 1 + 0.25 * Math.sin(Time.time * 0.9 + e.id), a = e.fout();
+    skyBeam(e.x, e.y, 9 * fl, a, SKY_HEIGHT, e.color);
+    bloom(e.x, e.y, 38 * fl, e.color, 0.9 * a);
+    Draw.color(Color.white, e.color, e.fin()); Draw.alpha(0.9 * a); Lines.stroke(2.2 * a); Lines.circle(e.x, e.y, 14 + 12 * e.fin());
+    for(let i = 0; i < 6; i++){ const ang = rs(e.id * 7 + i + Math.floor(Time.time / 3), 0, 360), d = 10 + 26 * e.fin(); Lines.stroke(1.6 * a); Lines.lineAngle(e.x + tx(ang, d), e.y + ty(ang, d), ang, 10 * a + 2); }
+    Draw.reset();
+});
+upgradeFx(FX_SPHERE, {r: 14, glow: 1});
+upgradeFx(FX_SHIELD_BREAK, {rot: 1, r: 60, flash: 1, sparks: 14, len: 10, ring: 1, shake: 2});
+upgradeFx(FX_MAGNETIC, {r: 26, glow: 1, sparks: 6, len: 6});
+upgradeFx(FX_BLADE_SLASH, {r: 20, flash: 1, sparks: 8, len: 12});
+upgradeFx(FX_EMP, {rot: 1, r: 80, flash: 1, sparks: 28, len: 16, ring: 1, shake: 5});
+upgradeFx(FX_BLASTER, {smoke: 5, r: 50, from: 0.6, flash: 1, sparks: 14, len: 12, ring: 1, shake: 2, flareRot: 90,
+    pre: (e, c) => { const head = e.y + 520 * (1 - e.fin() / 0.6); bloom(e.x, head, 22, c, 0.7); flare(e.x, head, 46, 5, c, 90, 0.6); }});
+upgradeFx(FX_METEOR, {rot: 1, r: 70, from: 0.6, flash: 1, sparks: 26, len: 18, ring: 1, shake: 5, smoke: 9});
+upgradeFx(FX_DEATH_LASER, {rot: 1, r: 40, glow: 1, sparks: 6, len: 8});
+upgradeFx(FX_DEATH_BLAST, {smoke: 8, rot: 1, r: 70, flash: 1, sparks: 24, len: 14, ring: 1, shake: 6});
+upgradeFx(FX_HEAL, {rot: 1, r: 40, glow: 1, sparks: 8, len: 6});
+upgradeFx(FX_AST_IMPACT, {rot: 1, r: 100, flash: 1, sparks: 40, len: 30, ring: 1});
+upgradeFx(FX_BLAST, {smoke: 5, r: 46, flash: 1, sparks: 14, len: 10, ring: 1});
+upgradeFx(FX_PURPLE_BURST, {r: 30, flash: 1, sparks: 12, len: 10});
+upgradeFx(FX_SHAPE, {r: 30, glow: 1, sparks: 10, len: 8});
+upgradeFx(FX_MIND, {r: 30, glow: 1, sparks: 10, len: 8, ring: 1});
+upgradeFx(FX_HYPNOSIS, {rot: 1, r: 60, glow: 1, sparks: 16, len: 14, ring: 1});
+
 // ---------- status effect + orb bullet
 const slowEffects = [];
 for(let i = 0; i < MAX_LEVEL; i++){
@@ -445,7 +563,7 @@ const weakened = new StatusEffect("thermion-weakened");
 weakened.speedMultiplier = 0.5; weakened.reloadMultiplier = 0.5; weakened.show = false; weakened.color = BLUE_COLOR;
 
 function makeOrb(dmg){
-    const bt = extend(BasicBulletType, 6, dmg, {
+    const bt = extend(BasicBulletType, 24, dmg, {
         hitEntity(b, entity, health){
             this.super$hitEntity(b, entity, health);
             if(Vars.net.client() || !(entity instanceof Unit)) return;
@@ -459,10 +577,10 @@ function makeOrb(dmg){
             const f = bonusFraction(nearestYellowCapacity(b.team, b.x, b.y));
             if(f > 0) build.damage(build.maxHealth * f);
         },
-        draw(b){ Draw.z(ORB_Z); this.drawTrail(b); drawOrb(b.x, b.y, ORB_R, 1); }
+        draw(b){ Draw.z(ORB_Z); this.drawTrail(b); drawOrb(b.x, b.y, ORB_R, 1, 2); }
     });
     bt.width = ORB_R * 2; bt.height = ORB_R * 2; bt.hitSize = ORB_R * 1.8; bt.lifetime = 80;
-    bt.homingPower = 0.2; bt.homingRange = TS * 400;
+    bt.homingPower = 0.35; bt.homingRange = TS * 400;
     bt.backColor = YELLOW_COLOR; bt.frontColor = Color.white; bt.trailColor = YELLOW_COLOR; bt.trailLength = 24; bt.trailWidth = ORB_R * 0.6;
     const lb = new LightningBulletType();
     lb.damage = dmg / 10; lb.lightningDamage = dmg / 10; lb.lightningColor = YELLOW_COLOR; lb.lightningLength = 7;
@@ -507,10 +625,26 @@ function droneGun(shot){
     const s = sndMachineGun(); if(s != null) w.shootSound = s;
     w.bullet = shot; return w;
 }
-const droneType = new UnitType("thermion-drone");
+// Drone hình ngôi sao 2 cánh: ghi đè draw() nên không dùng sprite của UnitType.
+function drawDroneStar(unit, big){
+    if(unit.inFogTo(Vars.player.team())) return;
+    const len = big ? 22 : 15, w = len * 0.28, rot = 90, z = Draw.z();
+    Draw.z(Layer.flyingUnit);
+    try{ Draw.blend(Packages.arc.graphics.Blending.additive); }catch(err){}
+    Draw.color(PURPLE_COLOR); Draw.alpha(0.55);
+    for(let k = 0; k < 3; k++) Drawf.tri(unit.x, unit.y, w * 1.9, len * 1.3, rot + k * 120);
+    Draw.color(Color.white, PURPLE_COLOR, 0.45); Draw.alpha(0.95);
+    for(let k = 0; k < 3; k++) Drawf.tri(unit.x, unit.y, w, len, rot + k * 120);
+    Draw.blend();
+    bloom(unit.x, unit.y, len * 0.6, PURPLE_COLOR, 0.6);
+    Draw.color(PURPLE_COLOR); Fill.circle(unit.x, unit.y, w * 1.35);   // viền tím quanh hố đen
+    Draw.color(Color.black); Fill.circle(unit.x, unit.y, w * 1.05);    // lõi đen tuyền
+    Draw.reset(); Draw.z(z);
+}
+const droneType = extend(UnitType, "thermion-drone", { draw(unit){ drawDroneStar(unit, false); } });
 setupDroneBody(droneType, 200);
 droneType.weapons.add(droneGun(droneBullet(25, 0, 4, 45, 6, 10, 1)));
-const droneV2Type = new UnitType("thermion-drone-v2");
+const droneV2Type = extend(UnitType, "thermion-drone-v2", { draw(unit){ drawDroneStar(unit, true); } });
 setupDroneBody(droneV2Type, 800);
 droneV2Type.weapons.add(droneGun(droneBullet(90, 0.01, 4, 45, 6, 10, 1)));
 (() => {
@@ -626,7 +760,7 @@ thermionBuild = prov(() => {
     sphereCharge: 0, orbCount: 0, shield: 0, shieldMax: 0, shieldCooldown: 0, shieldRegenTimer: 0, shieldHitCd: 0, shieldDirty: true,
     blades: [0, 0], bladeX: [0, 0], bladeY: [0, 0], bladeHit: [0, 0], bladeInit: [false, false], bladeTarget: [null, null],
     orbSeed: 0, skillCd: 1, empActiveTimer: 0, upgrading: false, paid: [0, 0, 0, 0, 0, 0, 0, 0],
-    lasers: [], asteroidPhase: 0, asteroidTimer: 0, asteroidRadius: 0, asteroidTx: 0, asteroidTy: 0,
+    plasmas: [], plasmaCd: 0, lasers: [], asteroidPhase: 0, asteroidTimer: 0, asteroidRadius: 0, asteroidTx: 0, asteroidTy: 0,
     deathTimer: 0, chargeLoopTimer: 0, rangeShown: 0, rangeStamp: -1, drones: [], savedDroneIds: [], ringRadius: 0, ringStamp: -1000,
 
     };
@@ -681,7 +815,7 @@ thermionBuild = prov(() => {
         if(to < YELLOW || to > DEATH) return;
         const frac = this.healthf();
         if(st.form == PURPLE && to != PURPLE) this.killDrones();
-        st.form = to; st.pendingForm = -1; st.formChangeTimer = 0; st.asteroidPhase = AST_NONE;
+        st.form = to; st.plasmas = []; st.plasmaCd = 0; st.pendingForm = -1; st.formChangeTimer = 0; st.asteroidPhase = AST_NONE;
         if(to == DEATH) st.deathTimer = DEATH_TICKS;
         this.health = Math.max(1, frac * this.nexMaxHealth());
         this.resetSkillStates();
@@ -719,6 +853,7 @@ thermionBuild = prov(() => {
         return out;
     },
     enemyUnits(r){ return r <= 0 ? [] : this.unitsAround(this.x, this.y, r); },
+    cachedEnemies(r){ if(st.ceStamp === undefined || Time.time < st.ceStamp || Time.time - st.ceStamp >= 6){ st.ceStamp = Time.time; st.ceList = this.enemyUnits(r); } return st.ceList.filter(u => u.isValid()); },
     buildingsAround(cx, cy, r){
         const out = [], tm = this.team;
         if(r <= 0) return out;
@@ -839,7 +974,7 @@ thermionBuild = prov(() => {
         return [this.x + tx(a, r), this.y + ty(a, r)];
     },
     updateElectricSphere(){
-        let enemies = this.enemyUnits(this.affectRadiusWorld());
+        let enemies = this.cachedEnemies(this.affectRadiusWorld());
         const cap = val(SPH_MAX, st.level), self = this;
         if(enemies.length > cap){
             enemies.sort((a, b) => a.dst2(self.x, self.y) - b.dst2(self.x, self.y));
@@ -980,30 +1115,43 @@ thermionBuild = prov(() => {
 
     // ============ BLUE
     updateBlaster(){
-        if(!st.secTick) return;
+        this.tickPlasma();
+        if(!st.secTick || st.plasmas.length > 0 || st.plasmaCd > 0) return;
         const ch = val(BLS_CH, st.level) / 100, dmg = val(BLS_DMG, st.level), extraPct = 0.5 * st.level / 100;
         const splashRad = val(BLS_SPLASH, st.level) * TS, list = this.enemyUnits(this.affectRadiusWorld());
         for(let k = 0; k < list.length; k++){
             const u = list[k];
             if(!chance(ch)) continue;
             const beams = ri(1, st.level), perBeam = dmg + dmg * beams / 5, extra = u.maxHealth * extraPct;
-            for(let i = 0; i < beams; i++) this.blasterBeam(u, i * BLS_INT, i == beams - 1, perBeam, extra, splashRad, rr(8), rr(6));
+            for(let i = 0; i < beams && st.plasmas.length < 12; i++) this.plasmaBeam(u, i, i == beams - 1, perBeam, extra, splashRad);
         }
     },
-    blasterBeam(u, delay, last, perBeam, extra, splashRad, ox, oy){
-        const self = this;
-        Time.run(delay, run(() => {
-            if(!u.isValid()) return;
-            self.fx(FX_BLASTER, u.x + ox, u.y + oy, 0, BLUE_COLOR);
-            Time.run(BLS_FALL, run(() => {
-                if(!u.isValid()) return;
-                self.sfx(sndLaser(), u.x, u.y, 0.9, rnd(0.9, 1.2));
-                u.damage(perBeam);
-                if(last) u.damage(extra);
-                const splash = (perBeam + (last ? extra : 0)) * BLS_SPLASH_FRAC, around = self.unitsAround(u.x, u.y, splashRad);
-                for(let i = 0; i < around.length; i++) if(around[i] != u) around[i].damage(splash);
-            }));
-        }));
+    // tia plasma từ trên trời: bắt đầu quanh pháo rồi đuổi theo mục tiêu, gây sát thương duy trì (tổng ~ perBeam mỗi giây)
+    plasmaBeam(u, idx, last, perBeam, extra, splashRad){
+        const x = this.x + rr(TS), y = this.y + rr(TS);
+        st.plasmas.push({tgt: u, x: x, y: y, life: BLS_MAX_TICKS, acc: idx * 3, fxT: 0, snd: 0, dmg: perBeam / 6,
+            ex: last ? extra / (BLS_MAX_TICKS / 10) : 0, rad: Math.max(splashRad * 0.6, TS * 1.5), speed: 4 + st.level * 0.6 + rnd(0, 1.5)});
+        this.fx(FX_BLASTER, x, y, 0, BLUE_COLOR);
+    },
+    tickPlasma(){
+        if(Vars.net.client() || st.plasmas.length == 0){ if(st.plasmaCd > 0 && st.plasmas.length == 0) st.plasmaCd -= Time.delta; return; }
+        for(let i = st.plasmas.length - 1; i >= 0; i--){
+            const p = st.plasmas[i], u = p.tgt;
+            p.life -= Time.delta;
+            if(!u.isValid() || p.life <= 0){ this.fx(FX_BLAST, p.x, p.y, 0, BLUE_COLOR); st.plasmas.splice(i, 1); continue; }
+            const dx = u.x - p.x, dy = u.y - p.y, d = Math.sqrt(dx * dx + dy * dy), sp = p.speed * Time.delta;
+            if(d > sp){ p.x += dx / d * sp; p.y += dy / d * sp; }else{ p.x = u.x; p.y = u.y; }
+            p.fxT -= Time.delta; if(p.fxT <= 0){ p.fxT = 3; this.fx(FX_PLASMA, p.x, p.y, 0, BLUE_COLOR); }
+            p.acc -= Time.delta;
+            if(p.acc <= 0){
+                p.acc = 10;
+                const around = this.unitsAround(p.x, p.y, p.rad);
+                for(let j = 0; j < around.length; j++) around[j].damagePierce(p.dmg);
+                if(p.ex > 0 && u.isValid()) u.damagePierce(p.ex);
+            }
+            p.snd -= Time.delta; if(p.snd <= 0){ p.snd = 30; this.sfx(sndLaser(), p.x, p.y, 0.5, rnd(0.9, 1.2)); }
+        }
+        if(st.plasmas.length == 0) st.plasmaCd = BLS_COOLDOWN_TICKS;
     },
     updateMeteor(){
         if(!st.secTick) return;
@@ -1132,7 +1280,28 @@ thermionBuild = prov(() => {
         this.fx(FX_AST_MUSHROOM, cx, cy, MUSHROOM_TILES * TS, Color.orange);
         for(let i = 0; i < doomedU.length; i++){ const u = doomedU[i]; this.fx(FX_BLAST, u.x, u.y, u.hitSize, Color.orange); u.kill(); }
         for(let i = 0; i < doomedB.length; i++){ const b = doomedB[i]; this.fx(FX_BLAST, b.x, b.y, b.block.size * TS, Color.orange); b.kill(); }
+        this.scorchMap();
         this.setForm(DEATH);
+    },
+    scorchMap(){
+        const W = Vars.world.width(), H = Vars.world.height(), rocks = [Blocks.hotrock, Blocks.magmarock, Blocks.basalt];
+        let y0 = 0;
+        const step = () => {
+            const y1 = Math.min(H, y0 + 10);
+            for(let y = y0; y < y1; y++) for(let x = 0; x < W; x++){
+                try{
+                    const t = Vars.world.tile(x, y);
+                    if(t == null) continue;
+                    const f = t.floor(), blk = t.block();
+                    t.setFloor(f.isLiquid ? (f.liquidDrop == Liquids.water ? Blocks.slag : rocks[Math.floor(rs(x * 7 + y * 131, 0, 2.999))]) : rocks[Math.floor(rs(x * 7 + y * 131, 0, 2.999))]);
+                    if(t.build == null && blk != Blocks.air && !blk.synthetic()) t.setAir();
+                }catch(err){ Log.err("[Thermion] scorch " + x + "," + y + ": " + err); }
+            }
+            y0 = y1;
+            if(y0 < H) Time.run(1, run(step));
+            else try{ Vars.renderer.blocks.floor.clearTiles(); }catch(err){}
+        };
+        step();
     },
 
     // ============ PURPLE
@@ -1457,9 +1626,29 @@ thermionBuild = prov(() => {
         const sf = 1 + Math.sin(t * 0.1) * 0.25;
         Draw.z(Layer.effect);
         beamTo(this.x, this.y, ex, ey, (5 + 11 * progress) * sf, BLUE_COLOR);
+        // hạt xoắn quanh tia laser, chạy dọc tia theo cùng hướng với tia (pháo -> thiên thạch)
+        const dx = ex - this.x, dy = ey - this.y, dist = Math.sqrt(dx * dx + dy * dy);
+        if(dist > 1){
+            const nx = dx / dist, ny = dy / dist, fwd = Math.atan2(dy, dx) / DEG, N = Math.min(260, Math.max(80, Math.floor(dist / 5)));
+            const bw = (5 + 11 * progress) * sf;
+            additive();
+            for(let i = 0; i < N; i++){
+                const ph = (t * (4 + rs(i * 7 + 1, 0, 7)) / dist + rs(i * 13 + 5, 0, 1)) % 1;      // 0 = pháo, 1 = thiên thạch
+                const len = rs(i * 11 + 3, 1, 3) * TS, rad = bw * rs(i * 17 + 9, 0.9, 2.2) + 4;
+                const lat = Math.sin(ph * dist * 0.03 + rs(i * 3 + 2, 0, 6.28) + t * 0.12) * rad;
+                const bx = lerp(this.x, ex, ph) - ny * lat, by = lerp(this.y, ey, ph) + nx * lat;
+                Draw.color(Color.white, BLUE_COLOR, rs(i * 19 + 7, 0, 1)); Draw.alpha(Math.sin(ph * Math.PI) * 0.95);
+                Lines.stroke(1 + rs(i * 23 + 1, 0, 1.4)); Lines.lineAngle(bx, by, fwd, len);
+            }
+            for(let k = 0; k < 4; k++){ const q = (t * 0.018 + k / 4) % 1; Draw.color(BLUE_COLOR, Color.white, q); Draw.alpha(0.7 * Math.sin(q * Math.PI)); Lines.stroke(2.5 * (1 - q) + 0.5); Lines.circle(this.x, this.y, 90 * (1 - q) + 8); }
+            Draw.blend();
+            bloom(this.x, this.y, 30 + 40 * progress, BLUE_COLOR, 0.8);
+            bloom(ex, ey, 26 + 30 * progress, Color.orange, 0.7);
+            Draw.reset();
+        }
     },
     drawSkillVisuals(t, fc){
-        const r = this.affectRadiusWorld(), enemies = this.enemyUnits(r);
+        const r = this.affectRadiusWorld(), enemies = this.cachedEnemies(r);
         for(let i = 0; i < enemies.length; i++) drawCorePulse(enemies[i].x, enemies[i].y, fc, 0.5);
         if(st.form == YELLOW || st.form == PURPLE){
             for(let i = 0; i < enemies.length; i++){
@@ -1488,7 +1677,7 @@ thermionBuild = prov(() => {
                 Draw.color(ov != null ? ov : YELLOW_COLOR); Draw.alpha(alpha * 0.85); Lines.stroke(4 * ss); Lines.circle(cx, cy, sr);
                 Draw.alpha(alpha * 0.05); Fill.circle(cx, cy, sr); Draw.reset();
             });
-            Draw.color(YELLOW_COLOR, 0.25); Lines.stroke(1.5); Lines.poly(cx, cy, 6, sr * 0.96, t * 0.3);
+            Draw.color(YELLOW_COLOR, 0.25); Lines.stroke(1.5); Lines.poly(cx, cy, 6, sr * 0.96, 0);
             Draw.z(Layer.blockOver);
         }
         if(st.level >= 5 && st.empActiveTimer > 0 && r > 0){
@@ -1511,7 +1700,7 @@ thermionBuild = prov(() => {
         if(st.level < 4 || r <= 0) return;
         const lr = r / LIM_DIV, self = this;
         Draw.color(BLUE_COLOR); Draw.alpha(0.35); Lines.stroke(1.5);
-        for(let i = 0; i < 4; i++) Lines.arc(this.x, this.y, lr, 0.18, t * 0.8 + i * 90);
+        for(let i = 0; i < 4; i++) Lines.arc(this.x, this.y, lr, 0.18, i * 90);
         Draw.alpha(0.05); Fill.circle(this.x, this.y, lr);
         Groups.bullet.intersect(this.x - lr, this.y - lr, lr * 2, lr * 2, cons(b => {
             if(b.team == self.team || !b.within(self.x, self.y, lr)) return;
