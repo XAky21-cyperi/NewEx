@@ -1,4 +1,6 @@
 
+require("thermion");
+
 const NEX_DEFAULTS_VERSION = "beta0.8.11xyak";
 const NEX_DEFAULTS_KEY = "newex-defaults-applied-version";
 
@@ -146,7 +148,7 @@ require("sonicor");
 
 require("laytery");
 
-require("thermion");
+
 
 require("beryi-drills");
 

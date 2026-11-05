@@ -1,31 +1,27 @@
-name: "newex-thermion"
-localizedName: "Thermion Wave Tower"
-description: '''
-Tháp chiến thuật 3 dạng:
-- 💛 Vàng: khống chế diện rộng, sát thương điện.
-- 💙 Xanh: hỏa lực quỹ đạo, hủy diệt tầm xa.
-- 💜 Tím: thao túng, cướp quân địch.
-'''
-type: "Block"
-size: 3
-health: 7500
+type: Block
+name: Thermion
+description: "Cỗ máy 5x5 nhiều dạng của NewEx chạy bằng lưới điện. Đổi giữa ba dạng Yellow / Blue / Purple, mỗi dạng có kỹ năng riêng; điện dư càng lớn thì phạm vi càng rộng. Đạt Level 5 để mở kỹ năng chủ động."
+
+category: turret
+size: 5
+health: 5000
+
 solid: true
 update: true
-hasPower: true
+sync: true
 configurable: true
-category: "turret"
-research: "core-shard"
 
-consumes: {
-  power: 4.0
-}
+hasPower: true
+outputsPower: false
+consumesPower: false
+
+buildVisibility: shown
 
 requirements: [
-  copper/200
-  lead/150
-  silicon/120
-  phase-fabric/50
+  copper/1000
+  silicon/500
+  titanium/300
 ]
 
-alwaysUnlocked: true
-researchCostMultiplier: 10
+research: newex
+researchCostMultiplier: 1
